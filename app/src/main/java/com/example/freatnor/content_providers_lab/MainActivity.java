@@ -5,40 +5,32 @@ import android.content.DialogInterface;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v4.content.CursorLoader;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.text.Layout;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.ViewGroup;
-import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.TextView;
 
-import com.example.freatnor.content_providers_lab.interfaces.onStockInsertedListener;
+import com.example.freatnor.content_providers_lab.interfaces.OnStockInsertedListener;
 import com.example.freatnor.content_providers_lab.models.StockItem;
 import com.example.freatnor.content_providers_lab.presenter.StockListAdapter;
 import com.google.gson.Gson;
 
 import java.io.IOException;
-import java.util.ArrayList;
 
 import okhttp3.Call;
 import okhttp3.Callback;
-import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 
-public class MainActivity extends AppCompatActivity implements onStockInsertedListener {
+public class MainActivity extends AppCompatActivity implements OnStockInsertedListener {
 
     public static final String URL = "http://dev.markitondemand.com/MODApis/Api/v2/Lookup/jsonp?input=";
     public static final String CALLBACK = "lab";
@@ -47,7 +39,9 @@ public class MainActivity extends AppCompatActivity implements onStockInsertedLi
     private ListView mListView;
     private StockListAdapter mAdapter;
 
-    private CursorLoader mLoader;
+    private StockCursorLoader mLoader;
+
+    private Cursor mCursor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,10 +80,10 @@ public class MainActivity extends AppCompatActivity implements onStockInsertedLi
     @Override
     protected void onResume() {
         super.onResume();
-        mLoader = new CursorLoader(this, StockPortfolioContract.StockPortfolio.CONTENT_URI, null, null, null, null);
+        mLoader = new StockCursorLoader(this, StockPortfolioContract.StockPortfolio.CONTENT_URI, this);
 
         mAdapter = new StockListAdapter(this, null);
-       mListView.setAdapter(mAdapter);
+        mListView.setAdapter(mAdapter);
     }
 
     private void getStock(String stockSymbol, final String quantity) {
@@ -106,14 +100,14 @@ public class MainActivity extends AppCompatActivity implements onStockInsertedLi
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                if(!response.isSuccessful()){
+                if (!response.isSuccessful()) {
                     throw new IOException("Bad or empty response. Unexpected Code " + response);
                 }
                 String body = response.body().string();
                 Log.d(TAG, "onResponse: response body - " + body);
                 body = body.substring("lab(".length(), body.length() - 1);
                 Log.d(TAG, "onResponse: response body after trimming - " + body);
-                if(!body.equals("")) {
+                if (!body.equals("")) {
                     Gson gson = new Gson();
                     StockItem[] stocks = gson.fromJson(body, StockItem[].class);
                     Log.d(TAG, "onResponse: array length = " + stocks.length);
@@ -131,8 +125,7 @@ public class MainActivity extends AppCompatActivity implements onStockInsertedLi
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_COMPANY_NAME, theStock.getName());
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_EXCHANGE_NAME, theStock.getExchange());
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_QUANTITY, theStock.getQuantity());
-        getContentResolver().insert(StockPortfolioContract.StockPortfolio.CONTENT_URI, values);
-        stockInserted();
+        mCursor = mLoader.loadInBackground();
 
     }
 
@@ -160,9 +153,10 @@ public class MainActivity extends AppCompatActivity implements onStockInsertedLi
 
     @Override
     public void stockInserted() {
-        Cursor cursor = mLoader.loadInBackground();
-        if(cursor!=null) {
-            mAdapter.swapCursor(cursor);
+        if (mCursor != null) {
+            mAdapter.swapCursor(mCursor);
+            mAdapter.notifyDataSetChanged();
+            Log.d(TAG, "stockInserted: reloading the cursor and listview");
         }
     }
 }
