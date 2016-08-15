@@ -56,7 +56,6 @@ public class StockPortfolioDatabaseHelper extends SQLiteOpenHelper{
     public long addStock(ContentValues values) {
         SQLiteDatabase db = getWritableDatabase();
         long insertedRow = db.insert(TABLE_STOCKS, null, values);
-        db.close();
         return insertedRow;
     }
 
@@ -64,14 +63,12 @@ public class StockPortfolioDatabaseHelper extends SQLiteOpenHelper{
         SQLiteDatabase db = getReadableDatabase();
 
         Cursor cursor = db.query(TABLE_STOCKS, null, null, null, null, null, COLUMN_SYMBOL);
-        db.close();
         return cursor;
     }
 
     public int deleteStock(String selection, String[] selectionArgs, String id) {
         SQLiteDatabase db = getWritableDatabase();
         int rowsDeleted = db.delete(TABLE_STOCKS, selection, selectionArgs);
-        db.close();
 
         return rowsDeleted;
     }

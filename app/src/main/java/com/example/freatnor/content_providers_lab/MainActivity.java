@@ -1,19 +1,34 @@
 package com.example.freatnor.content_providers_lab;
 
+import android.content.ContentValues;
 import android.content.DialogInterface;
+import android.database.Cursor;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.support.v4.content.CursorLoader;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.text.Layout;
+import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.EditText;
+import android.widget.ListView;
 import android.widget.TextView;
 
+import com.example.freatnor.content_providers_lab.interfaces.onStockInsertedListener;
+import com.example.freatnor.content_providers_lab.models.StockItem;
+import com.example.freatnor.content_providers_lab.presenter.StockListAdapter;
+import com.google.gson.Gson;
+
 import java.io.IOException;
+import java.util.ArrayList;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -23,10 +38,16 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements onStockInsertedListener {
 
     public static final String URL = "http://dev.markitondemand.com/MODApis/Api/v2/Lookup/jsonp?input=";
     public static final String CALLBACK = "lab";
+    private static final String TAG = "MainActivity";
+
+    private ListView mListView;
+    private StockListAdapter mAdapter;
+
+    private CursorLoader mLoader;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,24 +61,38 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
 
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this)
+                LayoutInflater inflater = getLayoutInflater();
+                final View dialogView = inflater.inflate(R.layout.add_stock_dialog, null);
+                AlertDialog dialog = new AlertDialog.Builder(MainActivity.this)
                         .setTitle("Add a new stock to the Portfolio")
-                        .setView(R.layout.add_stock_dialog)
+                        .setView(dialogView)
                         .setPositiveButton("Add Stock", new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialogInterface, int i) {
-                                EditText symbol = (EditText) findViewById(R.id.stock_symbol_input);
-                                EditText quantity = (EditText) findViewById(R.id.quantity_input);
+                                EditText symbol = (EditText) dialogView.findViewById(R.id.stock_symbol_input);
+                                EditText quantity = (EditText) dialogView.findViewById(R.id.quantity_input);
                                 getStock(symbol.getText().toString(), quantity.getText().toString());
                             }
                         })
-                        .setNegativeButton("Cancel", null);
-                builder.create();
+                        .setNegativeButton("Cancel", null)
+                        .create();
+                dialog.show();
             }
         });
+
+        mListView = (ListView) findViewById(R.id.stock_list_view);
     }
 
-    private void getStock(String stockSymbol, String quantity) {
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mLoader = new CursorLoader(this, StockPortfolioContract.StockPortfolio.CONTENT_URI, null, null, null, null);
+
+        mAdapter = new StockListAdapter(this, null);
+       mListView.setAdapter(mAdapter);
+    }
+
+    private void getStock(String stockSymbol, final String quantity) {
         OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder()
                 .url(URL + stockSymbol + "&callback=" + CALLBACK)
@@ -75,8 +110,30 @@ public class MainActivity extends AppCompatActivity {
                     throw new IOException("Bad or empty response. Unexpected Code " + response);
                 }
                 String body = response.body().string();
+                Log.d(TAG, "onResponse: response body - " + body);
+                body = body.substring("lab(".length(), body.length() - 1);
+                Log.d(TAG, "onResponse: response body after trimming - " + body);
+                if(!body.equals("")) {
+                    Gson gson = new Gson();
+                    StockItem[] stocks = gson.fromJson(body, StockItem[].class);
+                    Log.d(TAG, "onResponse: array length = " + stocks.length);
+                    StockItem theStock = stocks[0];
+                    theStock.setQuantity(quantity);
+                    insert(theStock);
+                }
             }
         });
+    }
+
+    private void insert(StockItem theStock) {
+        ContentValues values = new ContentValues();
+        values.put(StockPortfolioContract.StockPortfolio.COLUMN_SYMBOL, theStock.getSymbol());
+        values.put(StockPortfolioContract.StockPortfolio.COLUMN_COMPANY_NAME, theStock.getName());
+        values.put(StockPortfolioContract.StockPortfolio.COLUMN_EXCHANGE_NAME, theStock.getExchange());
+        values.put(StockPortfolioContract.StockPortfolio.COLUMN_QUANTITY, theStock.getQuantity());
+        getContentResolver().insert(StockPortfolioContract.StockPortfolio.CONTENT_URI, values);
+        stockInserted();
+
     }
 
     @Override
@@ -99,5 +156,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void stockInserted() {
+        Cursor cursor = mLoader.loadInBackground();
+        if(cursor!=null) {
+            mAdapter.swapCursor(cursor);
+        }
     }
 }
