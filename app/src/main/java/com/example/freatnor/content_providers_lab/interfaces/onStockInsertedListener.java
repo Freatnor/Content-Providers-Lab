@@ -6,5 +6,5 @@ import android.database.Cursor;
  * Created by Jonathan Taylor on 8/14/16.
  */
 public interface OnStockInsertedListener {
-    void stockInserted();
+    void stockInserted(Cursor cursor);
 }

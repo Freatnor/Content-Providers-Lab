@@ -5,7 +5,9 @@ import android.content.DialogInterface;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v4.app.LoaderManager;
 import android.support.v4.content.CursorLoader;
+import android.support.v4.content.Loader;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -30,7 +32,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class MainActivity extends AppCompatActivity implements OnStockInsertedListener {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor> {
 
     public static final String URL = "http://dev.markitondemand.com/MODApis/Api/v2/Lookup/jsonp?input=";
     public static final String CALLBACK = "lab";
@@ -41,7 +43,6 @@ public class MainActivity extends AppCompatActivity implements OnStockInsertedLi
 
     private StockCursorLoader mLoader;
 
-    private Cursor mCursor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,8 +81,7 @@ public class MainActivity extends AppCompatActivity implements OnStockInsertedLi
     @Override
     protected void onResume() {
         super.onResume();
-        mLoader = new StockCursorLoader(this, StockPortfolioContract.StockPortfolio.CONTENT_URI, this);
-
+        getSupportLoaderManager().initLoader(0, null, this);
         mAdapter = new StockListAdapter(this, null);
         mListView.setAdapter(mAdapter);
     }
@@ -114,6 +114,15 @@ public class MainActivity extends AppCompatActivity implements OnStockInsertedLi
                     StockItem theStock = stocks[0];
                     theStock.setQuantity(quantity);
                     insert(theStock);
+
+                    //attempt to stop Can't create handler inside thread that has not called Looper.prepare() errors...
+                    MainActivity.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            getSupportLoaderManager().restartLoader(0, null, MainActivity.this);
+                        }
+                    });
+
                 }
             }
         });
@@ -125,7 +134,7 @@ public class MainActivity extends AppCompatActivity implements OnStockInsertedLi
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_COMPANY_NAME, theStock.getName());
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_EXCHANGE_NAME, theStock.getExchange());
         values.put(StockPortfolioContract.StockPortfolio.COLUMN_QUANTITY, theStock.getQuantity());
-        mCursor = mLoader.loadInBackground();
+        Log.d(TAG, "insert: beginning the loader");
 
     }
 
@@ -151,12 +160,37 @@ public class MainActivity extends AppCompatActivity implements OnStockInsertedLi
         return super.onOptionsItemSelected(item);
     }
 
+//    @Override
+//    public void stockInserted(Cursor cursor) {
+//            mAdapter.swapCursor(cursor);
+//            mAdapter.notifyDataSetChanged();
+//            Log.d(TAG, "stockInserted: reloading the cursor and listview");
+//    }
+//
+//    @Override
+//    public void onLoadComplete(Loader<Cursor> loader, Cursor data) {
+//        mAdapter.swapCursor(data);
+//        mAdapter.notifyDataSetChanged();
+//        Log.d(TAG, "stockInserted: reloading the cursor and listview");
+//    }
+
     @Override
-    public void stockInserted() {
-        if (mCursor != null) {
-            mAdapter.swapCursor(mCursor);
-            mAdapter.notifyDataSetChanged();
-            Log.d(TAG, "stockInserted: reloading the cursor and listview");
+    public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+        switch(id){
+            case 0:
+                return new CursorLoader(this, StockPortfolioContract.StockPortfolio.CONTENT_URI, null, null, null, null);
+            default:
+                return null;
         }
+    }
+
+    @Override
+    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+        mAdapter.changeCursor(data);
+    }
+
+    @Override
+    public void onLoaderReset(Loader<Cursor> loader) {
+        mAdapter.changeCursor(null);
     }
 }
